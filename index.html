@@ -1,0 +1,96 @@
+<!doctype html>
+<html>
+
+<head>
+    <title>observable + redux</title>
+
+    <style>
+        body {
+            margin: 0 auto;
+            width: 778px;
+            margin-top: 50px;
+            text-align: center;
+        }
+
+        time, .wrapper {
+            width: 778px;
+            text-align: center;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="clock_id"></div>
+    <time></time>
+    <div class="wrapper">
+        <button>Toggle</button>
+    </div>
+
+    <script src="redux.min.js"></script>
+    <script src="rx.js"></script>
+    <script src="raphael-min.js"></script>
+    <script src="clock.js"></script>
+    <script src="moment.min.js"></script>
+    <script>
+        const reducer = (state = { stopped: false }, action) => {
+            let newState = Object.assign({}, state);
+
+            if (action.type === 'setup') {
+                newState.drawClock = true;
+            }
+
+            if (action.type === 'time') {
+                newState.drawClock = false;
+                newState.prev = state.now;
+                newState.now = action.now;
+            }
+
+            return newState;
+        }
+
+        const store = Redux.createStore(reducer, window.__REDUX_DEVTOOLS_EXTENSION__());
+        store.subscribe(() => {
+            const state = store.getState();
+
+            if (state.now) {
+                let el = document.getElementsByTagName('time')[0];
+                el.innerHTML = moment(state.now).format('hh:mm:ss');
+            }
+        });
+
+        const observable = Rx.Observable.from(store);
+
+        observable.filter(state => state.drawClock).subscribe(drawClock);
+
+        observable
+            .filter(state => !!state.prev && state.now)
+            .subscribe(state => updateClock(state.now));
+
+        observable
+            .filter(state => state.prev)
+            .filter(state => state.prev.getMinutes() !== state.now.getMinutes())
+            .map(state => state.now)
+            .subscribe(now => updateClock(now));
+
+        store.dispatch({ type: 'setup' });
+        store.dispatch({ type: 'time', now: new Date() });
+
+        function runClock() {
+            return setInterval(() => store.dispatch({ type: 'time', now: new Date() }), 1000);
+        }
+
+        let interval = runClock();
+
+        document.getElementsByTagName('button')[0].addEventListener('click', () => {
+            if (interval) {
+                clearInterval(interval);
+                interval = undefined;
+            } else {
+                interval = runClock();
+            }
+        }, false);
+    </script>
+</body>
+
+</html>
